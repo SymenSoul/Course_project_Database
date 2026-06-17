@@ -118,3 +118,31 @@ BEFORE INSERT ON orders
 FOR EACH ROW
 EXECUTE FUNCTION set_order_discount();
 
+-- =========================================================================
+-- Initial Seed Data
+-- =========================================================================
+
+-- Branches
+INSERT INTO branch (name, address) VALUES
+('Центральный филиал', 'ул. Ленина, д. 10'),
+('Северный филиал', 'пр. Мира, д. 45'),
+('Западный филиал', 'ул. Гагарина, д. 12');
+
+-- Service Types
+INSERT INTO service_type (name, type, base_cost) VALUES
+('Сухая химчистка куртки', 'Химчистка', 1200.00),
+('Чистка шерстяного пальто', 'Химчистка', 1800.00),
+('Аквачистка пуховика', 'Аквачистка', 1500.00),
+('Выведение пятен с платья', 'Пятновыведение', 800.00),
+('Чистка ковра', 'Специальная чистка', 350.00),
+('Глажка костюма', 'Утюжка', 500.00);
+
+-- Users (Default passwords: Admin -> StrongPass!123, Employee -> Employee!123)
+INSERT INTO users (username, password_hash, role, full_name) VALUES
+('admin', '924c8f81aa37dea3e8206314ccae02068f5a905a08fc8cab884302d30461aaa3', 'Admin', 'Иванов Иван Иванович'),
+('employee', '57d1aadf4bf62b3b34b7d4584315d86e630baf1297eb874a0ab8d89c4edb5a09', 'Employee', 'Петров Петр Петрович');
+
+-- Test Clients
+INSERT INTO client (last_name, first_name, middle_name, phone) VALUES
+('Сидоров', 'Алексей', 'Сергеевич', '+7 (999) 111-22-33'),
+('Кузнецова', 'Мария', 'Игоревна', '+7 (999) 444-55-66');
