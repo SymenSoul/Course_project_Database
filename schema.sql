@@ -97,3 +97,24 @@ CREATE INDEX idx_order_position_order ON order_position(order_id);
 -- Triggers for Data Integrity & Business Logic Automation
 -- =========================================================================
 
+-- Trigger: Automatically calculate order discount at the moment of order placement
+CREATE OR REPLACE FUNCTION set_order_discount()
+RETURNS TRIGGER AS $$
+DECLARE
+    order_count INT;
+BEGIN
+    SELECT COUNT(*) INTO order_count FROM orders WHERE client_id = NEW.client_id;
+    IF order_count >= 2 THEN
+        NEW.discount := 0.03;
+    ELSE
+        NEW.discount := 0.00;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_set_order_discount
+BEFORE INSERT ON orders
+FOR EACH ROW
+EXECUTE FUNCTION set_order_discount();
+
