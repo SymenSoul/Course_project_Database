@@ -186,3 +186,159 @@ bool DataController::isClientLoyal(int clientId) {
     return getClientOrderCount(clientId) >= 2;
 }
 
+// =========================================================================
+// Order CRUD
+// =========================================================================
+
+QList<Order> DataController::getAllOrders() {
+    QList<Order> list;
+    if (!Database::instance().isOpen()) return list;
+
+    // Use complex join query to retrieve all display fields and dynamically calculated total price
+    QString queryStr = 
+        "SELECT o.*, "
+        "       b.name AS branch_name, "
+        "       u.full_name AS employee_name, "
+        "       c.last_name || ' ' || c.first_name || ' ' || COALESCE(c.middle_name, '') AS client_name, "
+        "       COALESCE((SELECT SUM(final_price) FROM order_position WHERE order_id = o.id), 0.00) AS total_price "
+        "FROM orders o "
+        "JOIN branch b ON o.branch_id = b.id "
+        "JOIN users u ON o.user_id = u.id "
+        "JOIN client c ON o.client_id = c.id "
+        "ORDER BY o.intake_date DESC";
+
+    QSqlQuery q(queryStr, Database::instance().db());
+    while (q.next()) {
+        list.append(Order::fromQuery(q));
+    }
+    return list;
+}
+
+QList<Order> DataController::getOrdersByClient(int clientId) {
+    QList<Order> list;
+    if (!Database::instance().isOpen()) return list;
+
+    QString queryStr = 
+        "SELECT o.*, "
+        "       b.name AS branch_name, "
+        "       u.full_name AS employee_name, "
+        "       c.last_name || ' ' || c.first_name || ' ' || COALESCE(c.middle_name, '') AS client_name, "
+        "       COALESCE((SELECT SUM(final_price) FROM order_position WHERE order_id = o.id), 0.00) AS total_price "
+        "FROM orders o "
+        "JOIN branch b ON o.branch_id = b.id "
+        "JOIN users u ON o.user_id = u.id "
+        "JOIN client c ON o.client_id = c.id "
+        "WHERE o.client_id = :client_id "
+        "ORDER BY o.intake_date DESC";
+
+    QSqlQuery q(Database::instance().db());
+    q.prepare(queryStr);
+    q.bindValue(":client_id", clientId);
+    if (q.exec()) {
+        while (q.next()) {
+            list.append(Order::fromQuery(q));
+        }
+    }
+    return list;
+}
+
+bool DataController::addOrder(int branchId, int userId, int clientId, QString& errorMsg) {
+    if (!Database::instance().isOpen()) return false;
+
+    QSqlQuery q(Database::instance().db());
+    // Note: discount is set automatically by the database trigger (trigger_set_order_discount)
+    q.prepare("INSERT INTO orders (branch_id, user_id, client_id, intake_date) "
+              "VALUES (:branch_id, :user_id, :client_id, CURRENT_TIMESTAMP)");
+    q.bindValue(":branch_id", branchId);
+    q.bindValue(":user_id", userId);
+    q.bindValue(":client_id", clientId);
+
+    if (!q.exec()) {
+        errorMsg = "Ошибка создания заказа: " + q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DataController::deleteOrder(int id, QString& errorMsg) {
+    if (!Database::instance().isOpen()) return false;
+
+    QSqlQuery q(Database::instance().db());
+    q.prepare("DELETE FROM orders WHERE id = :id");
+    q.bindValue(":id", id);
+    if (!q.exec()) {
+        errorMsg = "Ошибка при удалении заказа: " + q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+// =========================================================================
+// OrderPosition CRUD
+// =========================================================================
+
+QList<OrderPosition> DataController::getPositionsForOrder(int orderId) {
+    QList<OrderPosition> list;
+    if (!Database::instance().isOpen()) return list;
+
+    QSqlQuery q(Database::instance().db());
+    q.prepare("SELECT * "
+              "FROM order_position "
+              "WHERE order_id = :order_id "
+              "ORDER BY id ASC");
+    q.bindValue(":order_id", orderId);
+
+    if (q.exec()) {
+        while (q.next()) {
+            list.append(OrderPosition::fromQuery(q));
+        }
+    }
+    return list;
+}
+
+bool DataController::addOrderPosition(int orderId, int serviceTypeId, const QString& itemName, double complexity, double urgency, double workVolume, QString& errorMsg) {
+    if (!Database::instance().isOpen()) return false;
+
+    QSqlQuery q(Database::instance().db());
+    // Note: final_price is calculated dynamically in the database view (order_position)
+    q.prepare("INSERT INTO order_position (order_id, service_type_id, item_name, complexity, urgency, work_volume) "
+              "VALUES (:order_id, :service_type_id, :item_name, :complexity, :urgency, :work_volume)");
+    q.bindValue(":order_id", orderId);
+    q.bindValue(":service_type_id", serviceTypeId);
+    q.bindValue(":item_name", itemName);
+    q.bindValue(":complexity", complexity);
+    q.bindValue(":urgency", urgency);
+    q.bindValue(":work_volume", workVolume);
+
+    if (!q.exec()) {
+        errorMsg = "Ошибка добавления вещи в заказ: " + q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DataController::deleteOrderPosition(int id, QString& errorMsg) {
+    if (!Database::instance().isOpen()) return false;
+
+    QSqlQuery q(Database::instance().db());
+    q.prepare("DELETE FROM order_position WHERE id = :id");
+    q.bindValue(":id", id);
+    if (!q.exec()) {
+        errorMsg = "Ошибка удаления вещи: " + q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DataController::markPositionAsReturned(int id, QString& errorMsg) {
+    if (!Database::instance().isOpen()) return false;
+
+    QSqlQuery q(Database::instance().db());
+    q.prepare("UPDATE order_position SET return_date = CURRENT_TIMESTAMP WHERE id = :id");
+    q.bindValue(":id", id);
+    if (!q.exec()) {
+        errorMsg = "Ошибка выдачи вещи: " + q.lastError().text();
+        return false;
+    }
+    return true;
+}
