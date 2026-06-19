@@ -200,7 +200,7 @@ QList<Order> DataController::getAllOrders() {
         "       b.name AS branch_name, "
         "       u.full_name AS employee_name, "
         "       c.last_name || ' ' || c.first_name || ' ' || COALESCE(c.middle_name, '') AS client_name, "
-        "       COALESCE((SELECT SUM(final_price) FROM order_position WHERE order_id = o.id), 0.00) AS total_price "
+        "       COALESCE((SELECT SUM(final_price) FROM order_position_view WHERE order_id = o.id), 0.00) AS total_price "
         "FROM orders o "
         "JOIN branch b ON o.branch_id = b.id "
         "JOIN users u ON o.user_id = u.id "
@@ -223,7 +223,7 @@ QList<Order> DataController::getOrdersByClient(int clientId) {
         "       b.name AS branch_name, "
         "       u.full_name AS employee_name, "
         "       c.last_name || ' ' || c.first_name || ' ' || COALESCE(c.middle_name, '') AS client_name, "
-        "       COALESCE((SELECT SUM(final_price) FROM order_position WHERE order_id = o.id), 0.00) AS total_price "
+        "       COALESCE((SELECT SUM(final_price) FROM order_position_view WHERE order_id = o.id), 0.00) AS total_price "
         "FROM orders o "
         "JOIN branch b ON o.branch_id = b.id "
         "JOIN users u ON o.user_id = u.id "
@@ -283,7 +283,7 @@ QList<OrderPosition> DataController::getPositionsForOrder(int orderId) {
 
     QSqlQuery q(Database::instance().db());
     q.prepare("SELECT * "
-              "FROM order_position "
+              "FROM order_position_view "
               "WHERE order_id = :order_id "
               "ORDER BY id ASC");
     q.bindValue(":order_id", orderId);
@@ -300,7 +300,7 @@ bool DataController::addOrderPosition(int orderId, int serviceTypeId, const QStr
     if (!Database::instance().isOpen()) return false;
 
     QSqlQuery q(Database::instance().db());
-    // Note: final_price is calculated dynamically in the database view (order_position)
+    // Note: final_price is calculated dynamically in the database view (order_position_view)
     q.prepare("INSERT INTO order_position (order_id, service_type_id, item_name, complexity, urgency, work_volume) "
               "VALUES (:order_id, :service_type_id, :item_name, :complexity, :urgency, :work_volume)");
     q.bindValue(":order_id", orderId);

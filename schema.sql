@@ -2,6 +2,7 @@
 -- Designed for PostgreSQL
 
 -- Drop views and tables if they exist (in reverse order of dependencies)
+DROP VIEW IF EXISTS order_position_view CASCADE;
 DROP TABLE IF EXISTS order_position CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS client CASCADE;
@@ -63,31 +64,27 @@ CREATE TABLE order_position (
     complexity NUMERIC(3, 2) NOT NULL DEFAULT 1.00 CHECK (complexity >= 1.0),
     urgency NUMERIC(3, 2) NOT NULL DEFAULT 1.00 CHECK (urgency >= 1.0),
     work_volume NUMERIC(10, 2) NOT NULL DEFAULT 1.00 CHECK (work_volume > 0),
-    final_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00 CHECK (final_price >= 0.00),
     return_date TIMESTAMP
 );
 
--- Trigger 2: Automatically calculate final price for each position
-CREATE OR REPLACE FUNCTION set_order_position_price()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_base_cost NUMERIC(10, 2);
-    v_discount NUMERIC(3, 2);
-BEGIN
-    SELECT base_cost INTO v_base_cost FROM service_type WHERE id = NEW.service_type_id;
-    SELECT discount INTO v_discount FROM orders WHERE id = NEW.order_id;
-    NEW.final_price := ROUND((v_base_cost * NEW.work_volume * NEW.complexity * NEW.urgency) * (1.0 - v_discount), 2);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_set_order_position_price
-BEFORE INSERT OR UPDATE ON order_position
-FOR EACH ROW
-EXECUTE FUNCTION set_order_position_price();
-
 -- 7. Database View for Order Positions
 -- Dynamically calculates final price on query to prevent data duplication.
+CREATE VIEW order_position_view AS
+SELECT op.id,
+       op.order_id,
+       op.service_type_id,
+       op.item_name,
+       op.complexity,
+       op.urgency,
+       op.work_volume,
+       op.return_date,
+       s.name AS service_name,
+       s.base_cost,
+       o.discount,
+       ROUND((s.base_cost * op.work_volume * op.complexity * op.urgency) * (1.0 - o.discount), 2) AS final_price
+FROM order_position op
+JOIN service_type s ON op.service_type_id = s.id
+JOIN orders o ON op.order_id = o.id;
 
 -- Indices for performance
 CREATE INDEX idx_orders_client ON orders(client_id);
