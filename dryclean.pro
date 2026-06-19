@@ -28,3 +28,8 @@ HEADERS += \
 
 # MacOS settings to run as normal application rather than app bundle (for simpler terminal execution)
 CONFIG -= app_bundle
+
+macx {
+    QMAKE_CXXFLAGS += -Wno-error=implicit-function-declaration -Wno-implicit-function-declaration
+    QMAKE_CFLAGS += -Wno-error=implicit-function-declaration -Wno-implicit-function-declaration
+}
