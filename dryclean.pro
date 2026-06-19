@@ -25,3 +25,6 @@ HEADERS += \
     src/view/authwindow.h \
     src/view/mainwindow.h \
     src/view/dialogs.h
+
+# MacOS settings to run as normal application rather than app bundle (for simpler terminal execution)
+CONFIG -= app_bundle
