@@ -360,8 +360,286 @@ void MainWindow::onTabChanged(int index) {
 // Data Refresh Functions
 // =========================================================================
 
-void MainWindow::refreshOrders() {}
-void MainWindow::refreshClients() {}
-void MainWindow::refreshServiceTypes() {}
-void MainWindow::refreshBranches() {}
-void MainWindow::refreshOrderPositions(int) {}
+void MainWindow::refreshOrders() {
+    modelOrders->clear();
+    modelOrders->setHorizontalHeaderLabels(QStringList() << "ID" << "Клиент" << "Дата приема" << "Филиал" << "Сотрудник" << "Скидка" << "Итоговая сумма");
+
+    QList<Order> list = DataController::instance().getAllOrders();
+    for (const auto& o : list) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString::number(o.id)));
+        row.append(new QStandardItem(o.clientName));
+        row.append(new QStandardItem(o.intakeDate.toString("dd.MM.yyyy hh:mm")));
+        row.append(new QStandardItem(o.branchName));
+        row.append(new QStandardItem(o.employeeName));
+        row.append(new QStandardItem(QString::number(o.discount * 100) + "%"));
+        row.append(new QStandardItem(QString::number(o.totalPrice, 'f', 2)));
+        modelOrders->appendRow(row);
+    }
+    viewOrders->resizeColumnsToContents();
+    
+    // Clear details if previously selected order doesn't exist
+    m_selectedOrderId = -1;
+    lblOrderSummary->setText("Выберите заказ для просмотра деталей.");
+    modelPositions->clear();
+    btnAddItem->setEnabled(false);
+    btnDeleteItem->setEnabled(false);
+    btnReturnItem->setEnabled(false);
+}
+
+void MainWindow::refreshClients() {
+    modelClients->clear();
+    modelClients->setHorizontalHeaderLabels(QStringList() << "ID" << "Фамилия" << "Имя" << "Отчество" << "Телефон" << "Статус клиента" << "Кол-во заказов");
+
+    QList<Client> list = DataController::instance().getAllClients();
+    for (const auto& c : list) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString::number(c.id)));
+        row.append(new QStandardItem(c.lastName));
+        row.append(new QStandardItem(c.firstName));
+        row.append(new QStandardItem(c.middleName));
+        row.append(new QStandardItem(c.phone));
+        
+        int orderCount = DataController::instance().getClientOrderCount(c.id);
+        QString status = (orderCount >= 2) ? "Постоянный (скидка 3%)" : "Обычный";
+        row.append(new QStandardItem(status));
+        row.append(new QStandardItem(QString::number(orderCount)));
+        
+        modelClients->appendRow(row);
+    }
+    viewClients->resizeColumnsToContents();
+}
+
+void MainWindow::refreshServiceTypes() {
+    modelServices->clear();
+    modelServices->setHorizontalHeaderLabels(QStringList() << "ID" << "Название услуги" << "Категория" << "Базовая стоимость");
+
+    QList<ServiceType> list = DataController::instance().getAllServiceTypes();
+    for (const auto& s : list) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString::number(s.id)));
+        row.append(new QStandardItem(s.name));
+        row.append(new QStandardItem(s.type));
+        row.append(new QStandardItem(QString::number(s.baseCost, 'f', 2) + " руб."));
+        modelServices->appendRow(row);
+    }
+    viewServices->resizeColumnsToContents();
+}
+
+void MainWindow::refreshBranches() {
+    modelBranches->clear();
+    modelBranches->setHorizontalHeaderLabels(QStringList() << "ID" << "Название филиала" << "Адрес");
+
+    QList<Branch> list = DataController::instance().getAllBranches();
+    for (const auto& b : list) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString::number(b.id)));
+        row.append(new QStandardItem(b.name));
+        row.append(new QStandardItem(b.address));
+        modelBranches->appendRow(row);
+    }
+    viewBranches->resizeColumnsToContents();
+}
+
+void MainWindow::refreshOrderPositions(int orderId) {
+    modelPositions->clear();
+    modelPositions->setHorizontalHeaderLabels(QStringList() << "ID" << "Вещь" << "Услуга" << "Объем работ" << "Сложность" << "Срочность" << "Дата возврата" << "Стоимость");
+
+    QList<OrderPosition> list = DataController::instance().getPositionsForOrder(orderId);
+    for (const auto& op : list) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString::number(op.id)));
+        row.append(new QStandardItem(op.itemName));
+        row.append(new QStandardItem(op.serviceName));
+        row.append(new QStandardItem(QString::number(op.workVolume)));
+        row.append(new QStandardItem(QString::number(op.complexity)));
+        row.append(new QStandardItem(QString::number(op.urgency)));
+        
+        QString dateStr = op.isReturned ? op.returnDate.toString("dd.MM.yyyy hh:mm") : "В обработке";
+        row.append(new QStandardItem(dateStr));
+        row.append(new QStandardItem(QString::number(op.finalPrice, 'f', 2) + " руб."));
+        modelPositions->appendRow(row);
+    }
+    viewPositions->resizeColumnsToContents();
+    
+    // Clear selection state
+    btnDeleteItem->setEnabled(false);
+    btnReturnItem->setEnabled(false);
+}
+
+// =========================================================================
+// Client CRUD Implementation
+// =========================================================================
+
+void MainWindow::handleAddClient() {
+    ClientDialog dlg(this, "Добавление клиента");
+    if (dlg.exec() == QDialog::Accepted) {
+        QString lastName, firstName, middleName, phone;
+        dlg.getClientData(lastName, firstName, middleName, phone);
+        if (DataController::instance().addClient(lastName, firstName, middleName, phone)) {
+            refreshClients();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось добавить клиента.");
+        }
+    }
+}
+
+void MainWindow::handleEditClient() {
+    QModelIndexList selected = viewClients->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите клиента для редактирования.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelClients->item(row, 0)->text().toInt();
+    QString lastName = modelClients->item(row, 1)->text();
+    QString firstName = modelClients->item(row, 2)->text();
+    QString middleName = modelClients->item(row, 3)->text();
+    QString phone = modelClients->item(row, 4)->text();
+
+    ClientDialog dlg(this, "Редактирование клиента");
+    dlg.setClientData(lastName, firstName, middleName, phone);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString newLastName, newFirstName, newMiddleName, newPhone;
+        dlg.getClientData(newLastName, newFirstName, newMiddleName, newPhone);
+        if (DataController::instance().updateClient(id, newLastName, newFirstName, newMiddleName, newPhone)) {
+            refreshClients();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось обновить данные клиента.");
+        }
+    }
+}
+
+void MainWindow::handleDeleteClient() {
+    QModelIndexList selected = viewClients->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите клиента для удаления.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelClients->item(row, 0)->text().toInt();
+    QString clientName = modelClients->item(row, 1)->text() + " " + modelClients->item(row, 2)->text();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Вы уверены, что хотите удалить клиента %1?").arg(clientName)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().deleteClient(id, errorMsg)) {
+            refreshClients();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+// =========================================================================
+// Order & Positions CRUD Implementation
+// =========================================================================
+
+void MainWindow::handleAddOrder() {
+    OrderDialog dlg(this);
+    if (dlg.exec() == QDialog::Accepted) {
+        int branchId = dlg.getSelectedBranchId();
+        int clientId = dlg.getSelectedClientId();
+        int userId = AuthController::instance().currentUser().id;
+
+        QString errorMsg;
+        if (DataController::instance().addOrder(branchId, userId, clientId, errorMsg)) {
+            refreshOrders();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+void MainWindow::handleDeleteOrder() {
+    QModelIndexList selected = viewOrders->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите заказ для удаления.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelOrders->item(row, 0)->text().toInt();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Вы уверены, что хотите удалить заказ №%1 со всеми его позициями?").arg(id)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().deleteOrder(id, errorMsg)) {
+            refreshOrders();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+void MainWindow::handleAddItem() {
+    if (m_selectedOrderId == -1) return;
+
+    OrderPositionDialog dlg(this);
+    if (dlg.exec() == QDialog::Accepted) {
+        int serviceId = dlg.getSelectedServiceId();
+        QString itemName = dlg.getItemName();
+        double complexity = dlg.getComplexity();
+        double urgency = dlg.getUrgency();
+        double workVolume = dlg.getWorkVolume();
+
+        QString errorMsg;
+        if (DataController::instance().addOrderPosition(m_selectedOrderId, serviceId, itemName, complexity, urgency, workVolume, errorMsg)) {
+            refreshOrderPositions(m_selectedOrderId);
+            // Also refresh orders table to update total price
+            int currentTab = tabWidget->currentIndex();
+            refreshOrders();
+            tabWidget->setCurrentIndex(currentTab);
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+void MainWindow::handleDeleteItem() {
+    QModelIndexList selected = viewPositions->selectionModel()->selectedRows();
+    if (selected.isEmpty() || m_selectedOrderId == -1) return;
+
+    int row = selected.first().row();
+    int id = modelPositions->item(row, 0)->text().toInt();
+    QString itemName = modelPositions->item(row, 1)->text();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Вы уверены, что хотите удалить вещь '%1' из заказа?").arg(itemName)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().deleteOrderPosition(id, errorMsg)) {
+            refreshOrderPositions(m_selectedOrderId);
+            // Refresh orders table to update total price
+            refreshOrders();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+void MainWindow::handleMarkReturned() {
+    QModelIndexList selected = viewPositions->selectionModel()->selectedRows();
+    if (selected.isEmpty() || m_selectedOrderId == -1) return;
+
+    int row = selected.first().row();
+    int id = modelPositions->item(row, 0)->text().toInt();
+    QString itemName = modelPositions->item(row, 1)->text();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Отметить выдачу (возврат клиенту) вещи '%1'?").arg(itemName)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().markPositionAsReturned(id, errorMsg)) {
+            refreshOrderPositions(m_selectedOrderId);
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+// =========================================================================
+// Branch CRUD Implementation
+// =========================================================================
+
+void MainWindow::handleAddBranch() {}
+void MainWindow::handleEditBranch() {}
+void MainWindow::handleDeleteBranch() {}
+void MainWindow::handleAddServiceType() {}
+void MainWindow::handleEditServiceType() {}
+void MainWindow::handleDeleteServiceType() {}
+void MainWindow::handleUpdateProfile() {}
+void MainWindow::handleLogout() {}
