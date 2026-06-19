@@ -48,9 +48,6 @@ void MainWindow::setupUI() {
     tabWidget = new QTabWidget(this);
     mainLayout->addWidget(tabWidget);
 
-    // Connect tab change to refresh appropriate tables
-    connect(tabWidget, &QTabWidget::currentChanged, this, &MainWindow::onTabChanged);
-
     // =========================================================================
     // Tab 1: Orders (Заказы)
     // =========================================================================
@@ -326,6 +323,9 @@ void MainWindow::setupUI() {
     viewServices->setModel(modelServices);
     viewBranches->setModel(modelBranches);
     viewPositions->setModel(modelPositions);
+
+    // Connect tab change to refresh appropriate tables (after models are fully initialized)
+    connect(tabWidget, &QTabWidget::currentChanged, this, &MainWindow::onTabChanged);
 }
 
 void MainWindow::applyPermissions() {
