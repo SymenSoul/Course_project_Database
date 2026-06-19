@@ -635,11 +635,164 @@ void MainWindow::handleMarkReturned() {
 // Branch CRUD Implementation
 // =========================================================================
 
-void MainWindow::handleAddBranch() {}
-void MainWindow::handleEditBranch() {}
-void MainWindow::handleDeleteBranch() {}
-void MainWindow::handleAddServiceType() {}
-void MainWindow::handleEditServiceType() {}
-void MainWindow::handleDeleteServiceType() {}
-void MainWindow::handleUpdateProfile() {}
-void MainWindow::handleLogout() {}
+void MainWindow::handleAddBranch() {
+    BranchDialog dlg(this, "Добавление филиала");
+    if (dlg.exec() == QDialog::Accepted) {
+        QString name, address;
+        dlg.getBranchData(name, address);
+        if (DataController::instance().addBranch(name, address)) {
+            refreshBranches();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось создать филиал.");
+        }
+    }
+}
+
+void MainWindow::handleEditBranch() {
+    QModelIndexList selected = viewBranches->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите филиал для редактирования.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelBranches->item(row, 0)->text().toInt();
+    QString name = modelBranches->item(row, 1)->text();
+    QString address = modelBranches->item(row, 2)->text();
+
+    BranchDialog dlg(this, "Редактирование филиала");
+    dlg.setBranchData(name, address);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString newName, newAddress;
+        dlg.getBranchData(newName, newAddress);
+        if (DataController::instance().updateBranch(id, newName, newAddress)) {
+            refreshBranches();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось обновить филиал.");
+        }
+    }
+}
+
+void MainWindow::handleDeleteBranch() {
+    QModelIndexList selected = viewBranches->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите филиал для удаления.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelBranches->item(row, 0)->text().toInt();
+    QString name = modelBranches->item(row, 1)->text();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Удалить филиал '%1'?").arg(name)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().deleteBranch(id, errorMsg)) {
+            refreshBranches();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+// =========================================================================
+// ServiceType CRUD Implementation
+// =========================================================================
+
+void MainWindow::handleAddServiceType() {
+    ServiceTypeDialog dlg(this, "Добавление услуги");
+    if (dlg.exec() == QDialog::Accepted) {
+        QString name, type;
+        double baseCost;
+        dlg.getServiceData(name, type, baseCost);
+        if (DataController::instance().addServiceType(name, type, baseCost)) {
+            refreshServiceTypes();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось создать услугу.");
+        }
+    }
+}
+
+void MainWindow::handleEditServiceType() {
+    QModelIndexList selected = viewServices->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите услугу для редактирования.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelServices->item(row, 0)->text().toInt();
+    QString name = modelServices->item(row, 1)->text();
+    QString type = modelServices->item(row, 2)->text();
+    // Parse double cost, removing " руб." suffix
+    QString costStr = modelServices->item(row, 3)->text();
+    costStr.remove(" руб.");
+    double baseCost = costStr.toDouble();
+
+    ServiceTypeDialog dlg(this, "Редактирование услуги");
+    dlg.setServiceData(name, type, baseCost);
+    if (dlg.exec() == QDialog::Accepted) {
+        QString newName, newType;
+        double newBaseCost;
+        dlg.getServiceData(newName, newType, newBaseCost);
+        if (DataController::instance().updateServiceType(id, newName, newType, newBaseCost)) {
+            refreshServiceTypes();
+        } else {
+            QMessageBox::critical(this, "Ошибка", "Не удалось обновить услугу.");
+        }
+    }
+}
+
+void MainWindow::handleDeleteServiceType() {
+    QModelIndexList selected = viewServices->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+        QMessageBox::warning(this, "Предупреждение", "Пожалуйста, выберите услугу для удаления.");
+        return;
+    }
+    int row = selected.first().row();
+    int id = modelServices->item(row, 0)->text().toInt();
+    QString name = modelServices->item(row, 1)->text();
+
+    if (QMessageBox::question(this, "Подтверждение", QString("Удалить услугу '%1'?").arg(name)) == QMessageBox::Yes) {
+        QString errorMsg;
+        if (DataController::instance().deleteServiceType(id, errorMsg)) {
+            refreshServiceTypes();
+        } else {
+            QMessageBox::critical(this, "Ошибка", errorMsg);
+        }
+    }
+}
+
+// =========================================================================
+// Profile & Session management
+// =========================================================================
+
+void MainWindow::handleUpdateProfile() {
+    int userId = AuthController::instance().currentUser().id;
+    QString username = txtProfileUsername->text().trimmed();
+    QString fullName = txtProfileFullName->text().trimmed();
+    QString password = txtProfilePassword->text();
+    QString confirmPassword = txtProfileConfirmPassword->text();
+    QString errorMsg;
+
+    if (!password.isEmpty() && password != confirmPassword) {
+        QMessageBox::warning(this, "Ошибка", "Пароли не совпадают.");
+        return;
+    }
+
+    if (AuthController::instance().updateUserProfile(userId, username, password, fullName, errorMsg)) {
+        QMessageBox::information(this, "Успех", "Данные успешно обновлены!");
+        txtProfilePassword->clear();
+        txtProfileConfirmPassword->clear();
+        
+        // Refresh greeting label
+        User curUser = AuthController::instance().currentUser();
+        QString roleRu = (curUser.role == "Admin") ? "Администратор" : "Сотрудник";
+        lblUserGreeting->setText(QString("Пользователь: <b>%1</b> | Роль: <i>%2</i>").arg(curUser.fullName, roleRu));
+    } else {
+        QMessageBox::critical(this, "Ошибка", errorMsg);
+    }
+}
+
+void MainWindow::handleLogout() {
+    AuthController::instance().logout();
+    AuthWindow *authWin = new AuthWindow();
+    authWin->show();
+    this->close();
+}
