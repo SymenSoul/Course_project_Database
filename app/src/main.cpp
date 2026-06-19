@@ -128,8 +128,8 @@ int main(int argc, char *argv[]) {
     );
 
     // Initialize Database connection (Single Session Connection)
-    // Connect to localhost:5432, db "dryclean", user "symens", empty password (trust authenticated)
-    if (!Database::instance().connect("127.0.0.1", 5432, "dryclean", "symens", "")) {
+    // Connect to localhost:5432, db "dryclean", user "user", empty password (trust authenticated)
+    if (!Database::instance().connect("127.0.0.1", 5432, "dryclean", "user", "")) {
         QMessageBox::critical(nullptr, "Ошибка БД", 
             "Не удалось подключиться к базе данных PostgreSQL.\n"
             "Пожалуйста, убедитесь, что сервер PostgreSQL запущен и база данных 'dryclean' создана.");
