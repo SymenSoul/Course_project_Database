@@ -47,7 +47,7 @@ jobs:
             if ($pgVersionDir) {
                 $pgBin = Join-Path $pgVersionDir.FullName "bin"
                 Write-Host "Found PostgreSQL bin directory at: $pgBin"
-                Get-ChildItem -Path $pgBin -Filter "*.dll" | Where-Object { $_.Name -match "libpq|libcrypto|libssl|libintl|libiconv|ssleay|libeay" } | Copy-Item -Destination "app/release/"
+                Get-ChildItem -Path $pgBin -Filter "*.dll" | Copy-Item -Destination "app/release/"
             } else {
                 Write-Error "No PostgreSQL version directory found in $pgPath"
                 exit 1
@@ -56,6 +56,7 @@ jobs:
             Write-Error "PostgreSQL installation path $pgPath does not exist"
             exit 1
         }
+
 
         # Очищаем мусор компиляции (.obj, moc_*) из папки релиза, чтобы архив был чистым
         Remove-Item -Path "app/release/*.obj" -Force -ErrorAction SilentlyContinue
