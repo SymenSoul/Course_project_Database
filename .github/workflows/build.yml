@@ -1,0 +1,57 @@
+name: Build and Package Windows App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Позволяет запускать сборку вручную через сайт GitHub
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup PostgreSQL
+      uses: ikalnytskyi/action-setup-postgres@v8
+      with:
+        username: postgres
+        password: password
+        database: dryclean
+
+    - name: Install Qt 6
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.6.1'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+
+    - name: Build Application
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        cd app
+        qmake dryclean.pro CONFIG+=release
+        nmake
+
+    - name: Package Qt Dependencies (windeployqt)
+      shell: pwsh
+      run: |
+        windeployqt --release app/release/dryclean.exe
+
+    - name: Package PostgreSQL Client Dependencies
+      shell: pwsh
+      run: |
+        # Динамически находим директорию установки PostgreSQL и копируем клиентские библиотеки
+        $psqlPath = (Get-Command psql).Source
+        $pgBin = Split-Path $psqlPath
+        Get-ChildItem -Path $pgBin -Filter "*.dll" | Where-Object { $_.Name -match "libpq|libcrypto|libssl|libintl|libiconv|ssleay|libeay" } | Copy-Item -Destination "app/release/"
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dryclean-windows-x64
+        path: app/release/
