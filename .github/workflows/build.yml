@@ -15,13 +15,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup PostgreSQL
-      uses: ikalnytskyi/action-setup-postgres@v8
-      with:
-        username: postgres
-        password: password
-        database: dryclean
-
     - name: Install Qt 6
       uses: jurplel/install-qt-action@v4
       with:
@@ -29,10 +22,12 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2019_64'
 
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Build Application
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
         cd app
         qmake dryclean.pro CONFIG+=release
         nmake
@@ -45,13 +40,26 @@ jobs:
     - name: Package PostgreSQL Client Dependencies
       shell: pwsh
       run: |
-        # Динамически находим директорию установки PostgreSQL и копируем клиентские библиотеки
-        $psqlPath = (Get-Command psql).Source
-        $pgBin = Split-Path $psqlPath
-        Get-ChildItem -Path $pgBin -Filter "*.dll" | Where-Object { $_.Name -match "libpq|libcrypto|libssl|libintl|libiconv|ssleay|libeay" } | Copy-Item -Destination "app/release/"
+        # Динамически находим директорию предустановленного PostgreSQL и копируем библиотеки
+        $pgPath = "C:\Program Files\PostgreSQL"
+        if (Test-Path $pgPath) {
+            $pgVersionDir = Get-ChildItem -Path $pgPath | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+            if ($pgVersionDir) {
+                $pgBin = Join-Path $pgVersionDir.FullName "bin"
+                Write-Host "Found PostgreSQL bin directory at: $pgBin"
+                Get-ChildItem -Path $pgBin -Filter "*.dll" | Where-Object { $_.Name -match "libpq|libcrypto|libssl|libintl|libiconv|ssleay|libeay" } | Copy-Item -Destination "app/release/"
+            } else {
+                Write-Error "No PostgreSQL version directory found in $pgPath"
+                exit 1
+            }
+        } else {
+            Write-Error "PostgreSQL installation path $pgPath does not exist"
+            exit 1
+        }
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: dryclean-windows-x64
         path: app/release/
+
