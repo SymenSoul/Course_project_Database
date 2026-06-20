@@ -57,9 +57,14 @@ jobs:
             exit 1
         }
 
+        # Очищаем мусор компиляции (.obj, moc_*) из папки релиза, чтобы архив был чистым
+        Remove-Item -Path "app/release/*.obj" -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "app/release/moc_*" -Force -ErrorAction SilentlyContinue
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: dryclean-windows-x64
         path: app/release/
+
 
