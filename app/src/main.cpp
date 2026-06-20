@@ -2,6 +2,8 @@
 #include "model/database.h"
 #include "view/authwindow.h"
 #include <QMessageBox>
+#include <QSettings>
+#include <QSqlError>
 
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
@@ -127,12 +129,36 @@ int main(int argc, char *argv[]) {
         "}\n"
     );
 
+    // Load database connection settings from config.ini next to the executable
+    QString configPath = QDir::toNativeSeparators(QApplication::applicationDirPath() + "/config.ini");
+    QSettings settings(configPath, QSettings::IniFormat);
+
+    settings.beginGroup("Database");
+    if (!settings.contains("Host")) {
+        // Write default configuration if it does not exist
+        settings.setValue("Host", "127.0.0.1");
+        settings.setValue("Port", 5432);
+        settings.setValue("DatabaseName", "dryclean");
+        settings.setValue("Username", "user");
+        settings.setValue("Password", "");
+        settings.sync();
+    }
+
+    QString host = settings.value("Host", "127.0.0.1").toString();
+    int port = settings.value("Port", 5432).toInt();
+    QString dbName = settings.value("DatabaseName", "dryclean").toString();
+    QString user = settings.value("Username", "user").toString();
+    QString password = settings.value("Password", "").toString();
+    settings.endGroup();
+
     // Initialize Database connection (Single Session Connection)
-    // Connect to localhost:5432, db "dryclean", user "user", empty password (trust authenticated)
-    if (!Database::instance().connect("127.0.0.1", 5432, "dryclean", "user", "")) {
+    if (!Database::instance().connect(host, port, dbName, user, password)) {
+        QString errorMsg = Database::instance().db().lastError().text();
         QMessageBox::critical(nullptr, "Ошибка БД", 
-            "Не удалось подключиться к базе данных PostgreSQL.\n"
-            "Пожалуйста, убедитесь, что сервер PostgreSQL запущен и база данных 'dryclean' создана.");
+            "Не удалось подключиться к базе данных PostgreSQL.\n\n"
+            "Детали ошибки:\n" + errorMsg + "\n"
+            "Пожалуйста, проверьте настройки подключения в файле:\n" + configPath + "\n\n"
+            "Убедитесь, что сервер PostgreSQL запущен, указанная база данных создана, а логин и пароль верны.");
         return 1;
     }
 
